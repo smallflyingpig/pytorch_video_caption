@@ -11,7 +11,7 @@ import pandas as pd
 from keras.preprocessing import sequence
 import matplotlib.pyplot as plt
 import os
-
+import re
     
 class DataSet_MSVD():
     def __init__(self,csv_path,video_step,caption_step,image_dim,batch_size=50,video_train_data_path="./data/video_corpus.csv",\
@@ -244,12 +244,27 @@ class VideoCaption(nn.Module):
         self.caption_step = caption_step;
         self.word_num = word_num;
         self.word2vec = nn.Embedding(word_num,word_embed_dim);
-        self.vec2word = nn.Linear(hidden_dim,word_num);
-        self.img_embed = nn.Linear(image_dim,img_embed_dim);
-        self.lstm1 = nn.LSTMCell(input_size=img_embed_dim,hidden_size=hidden_dim);
-        self.lstm2 = nn.LSTMCell(input_size=word_embed_dim+hidden_dim, hidden_size=hidden_dim);
         
-    def forward(self, input_image, input_caption):
+        nn.init.uniform(self.word2vec.weight,-0.1,0.1);
+        self.vec2word = nn.Linear(hidden_dim,word_num);
+        nn.init.uniform(self.vec2word.weight,-0.1,0.1);
+        nn.init.constant(self.vec2word.bias,0);
+        self.img_embed = nn.Linear(image_dim,img_embed_dim);
+        nn.init.uniform(self.img_embed.weight,-0.1,0.1);
+        nn.init.constant(self.img_embed.bias,0);
+        self.lstm1 = nn.LSTMCell(input_size=img_embed_dim,hidden_size=hidden_dim);
+        #nn.init.uniform(self.lstm1.weight_hh,-0.1,0.1);
+        #nn.init.uniform(self.lstm1.weight_ih,-0.1,0.1);
+        nn.init.orthogonal(self.lstm1.weight_hh);
+        nn.init.orthogonal(self.lstm1.weight_ih);
+        
+        self.lstm2 = nn.LSTMCell(input_size=word_embed_dim+hidden_dim, hidden_size=hidden_dim);
+        #nn.init.uniform(self.lstm2.weight_hh,-0.1,0.1);
+        #nn.init.uniform(self.lstm2.weight_ih,-0.1,0.1);
+        nn.init.orthogonal(self.lstm2.weight_hh);
+        nn.init.orthogonal(self.lstm2.weight_ih);
+        
+    def forward(self, input_image, input_caption, caption_mask):
         '''
         input_image: int Variable, batch_size x video_step x image_dim
         input_caption: int Variable, batch_size x (1+caption_step) x 1 (word is idx, so the dim is 1)
@@ -272,22 +287,27 @@ class VideoCaption(nn.Module):
         
         loss=Variable(torch.FloatTensor([0])).cuda();
         #decoding
+        #one_hot_eye = np.eye(self.word_num).astype('int64');
         for step in xrange(self.caption_step):
             output1,state1 = self.lstm1(padding_for_lstm1,(output1, state1));
             output2,state2 = self.lstm2(torch.cat((word_vec[:,step,:],output1),1),(output2, state2));
             
             word_onehot = self.vec2word(output2);
+            #word_onehot_softmax = nn.Softmax(dim=1)(word_onehot);
             labels = input_caption[:,step+1];
-            one_hot_eye = np.eye(self.word_num).astype('int64');
-            one_hot_labels = np.zeros((labels.data.shape[0],self.word_num),dtype='int64');
-            for idx,data in enumerate(labels.data):
-                one_hot_labels[idx]=one_hot_eye[data];
             
-            labels_onehot = Variable(torch.FloatTensor(one_hot_labels)).cuda();
-            labels_onehot_list = labels_onehot.cpu().data.tolist()
-            print len(labels_onehot_list)
-            loss_func = nn.BCEWithLogitsLoss();
-            loss += loss_func(word_onehot,labels_onehot);
+            #one_hot_labels = np.zeros((labels.data.shape[0],self.word_num),dtype='int64');
+            #for idx,data in enumerate(labels.data):
+             #   one_hot_labels[idx]=one_hot_eye[data];
+            
+            #labels_onehot = Variable(torch.FloatTensor(one_hot_labels)).cuda();
+            #labels_onehot_list = labels_onehot.cpu().data.tolist()
+            #print len(labels_onehot_list)
+            #loss_func = nn.BCEWithLogitsLoss()*caption_mask[:,step];
+            loss_func = nn.CrossEntropyLoss(reduce=False);
+            
+            loss_temp = loss_func(word_onehot,labels)*(caption_mask[:,step+1].float());
+            loss += torch.sum(loss_temp)/self.batch_size;
         
         return loss;
     
@@ -320,23 +340,27 @@ class VideoCaption(nn.Module):
             #print word_onehot.shape
             _,word_idx = torch.max(word_onehot,1);
             #print word_idx.data[0];
+            
             words.append(word_idx.data[0]);
             
             previous_word = self.word2vec(word_idx);
         
         return words;
 
-def train():
+batch_size = 100;
+image_dim = 4096;
+img_embed_dim = 1000;
+word_embed_dim = 1000;
+hidden_dim = 1000;
+video_step = 80;
+caption_step = 20;
+epoches=1001;
+csv_path = "./data/video_corpus.csv"
+
+
+def train(check_point=None):
     #parameters
-    batch_size = 100;
-    image_dim = 4096;
-    img_embed_dim = 100;
-    word_embed_dim = 100;
-    hidden_dim = 100;
-    video_step = 80;
-    caption_step = 20;
-    epoches=100;
-    csv_path = "./data/video_corpus.csv"
+    
     loss_log_file = "./loss.txt";
     data_set = DataSet_MSVD(csv_path=csv_path,video_step=video_step,caption_step=caption_step,\
                             image_dim=image_dim,batch_size=batch_size);
@@ -346,6 +370,12 @@ def train():
                                      word_embed_dim=word_embed_dim,\
                                      hidden_dim=hidden_dim,video_step=video_step,\
                                      caption_step=caption_step);
+    if check_point != None:
+        video_caption_net.load_state_dict(state_dict=torch.load(check_point));
+        start_epoche = int(re.search(r"(\d*)\Z",check_point).groups()[-1]);
+    else:
+        start_epoche = int(0);
+        
     video_caption_net.cuda();
     print video_caption_net;
     
@@ -353,8 +383,9 @@ def train():
     
     loss_list=[];
     log_fp = open(loss_log_file,"w");
-    torch.backends.cudnn = False;
-    for epoche in range(epoches):
+    #torch.backends.cudnn = False;
+
+    for epoche in range(start_epoche,epoches):
         mini_batch_idx=0;
         while True:
             start_time = time.time();
@@ -362,13 +393,20 @@ def train():
             video_data,caption_data = data_set.next_batch();
             if len(video_data) == 0:
                 break;
-            video_data,caption_data = Variable(torch.FloatTensor(video_data)),Variable(torch.LongTensor(caption_data));
-            video_data,caption_data = video_data.cuda(),caption_data.cuda()
-            loss = video_caption_net(video_data,caption_data);
+            
+            caption_mask = np.zeros( (caption_data.shape[0], caption_data.shape[1]) )
+            nonzeros = np.array( map(lambda x: (x != 0).sum() + 1, caption_data ) )
+
+            for ind, row in enumerate(caption_mask):
+                row[:nonzeros[ind]] = 1
+                
+            video_data,caption_data,caption_mask = Variable(torch.FloatTensor(video_data)),Variable(torch.LongTensor(caption_data)),\
+                                                        Variable(torch.LongTensor(caption_mask));
+            video_data,caption_data,caption_mask = video_data.cuda(),caption_data.cuda(),caption_mask.cuda();
+            loss = video_caption_net(video_data,caption_data,caption_mask);
             optimizer.zero_grad();
             loss.backward();
             optimizer.step();
-        
             
             loss_list.append(loss.data[0]);
             
@@ -376,7 +414,8 @@ def train():
                     epoche,mini_batch_idx,loss.data[0],str(time.time()-start_time)));
             log_fp.write("epoche:{0},mini_batch:{1},loss:{2},Escape time:{3}\n".format(\
                     epoche,mini_batch_idx,loss.data[0],str(time.time()-start_time)));
-            
+        if epoche%10 == 0:
+            torch.save(video_caption_net.state_dict(),"./model_temp/s2vt.pytorch.{0}".format(epoche));
             ax=plt.subplot(111)
             plt.plot(range(len(loss_list)),loss_list,color='black');
             #plt.plot(range(epoches),test_loss_list,color="red");
@@ -394,14 +433,6 @@ def train():
     
 def test(state_dict_path):
     #parameters
-    batch_size = 100;
-    image_dim = 4096;
-    img_embed_dim = 100;
-    word_embed_dim = 100;
-    hidden_dim = 100;
-    video_step = 80;
-    caption_step = 20;
-    csv_path = "./data/video_corpus.csv"
 
     data_set = DataSet_MSVD(csv_path=csv_path,video_step=video_step,caption_step=caption_step,\
                             image_dim=image_dim,batch_size=batch_size);
@@ -422,11 +453,13 @@ def test(state_dict_path):
     for idx,data_path in enumerate(test_data_path):
         print("idx:{0},data_path:{1}".format(idx,data_path))
         video_feature = np.load(data_path);
+        if video_feature.shape[0] != video_step:
+            continue;
         video_feature = Variable(torch.FloatTensor(video_feature));
         #video_feature.cuda();
         words = video_caption_net.generate_cpu(video_feature);
         
-        generated_words = data_set.idx2word[words]
+        generated_words = [data_set.idx2word[word] for word in words];
 
         punctuation = np.argmax(np.array(generated_words) == '<eos>') + 1
         generated_words = generated_words[:punctuation]
@@ -439,8 +472,10 @@ def test(state_dict_path):
         test_output_txt_fd.write(generated_sentence + '\n\n')
 
 if __name__=="__main__":
-    train();
-    #test("./s2vt.pytorch");
+    #train(check_point=None);
+    test("./model_temp/s2vt.pytorch.1000");
+
+    
     
 
     
