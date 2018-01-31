@@ -12,6 +12,7 @@ from keras.preprocessing import sequence
 import matplotlib.pyplot as plt
 import os
 import re
+import sys
     
 class DataSet_MSVD():
     def __init__(self,csv_path,video_step,caption_step,image_dim,batch_size=50,video_train_data_path="./data/video_corpus.csv",\
@@ -472,8 +473,17 @@ def test(state_dict_path):
         test_output_txt_fd.write(generated_sentence + '\n\n')
 
 if __name__=="__main__":
-    #train(check_point=None);
-    test("./model_temp/s2vt.pytorch.1000");
+    if len(sys.argv)>=2:
+        if sys.argv[1]=='train':
+            train(check_point=None);    
+        elif sys.argv[1]=='test':
+            test("./model_temp/s2vt.pytorch.1000");
+        else:
+            print("use 'python s2vt.py train' to train the model and use 'python s2vt.py test' to test the model");    
+    else:
+        print("use 'python s2vt.py train' to train the model and use 'python s2vt.py test' to test the model");    
+    
+    
 
     
     
