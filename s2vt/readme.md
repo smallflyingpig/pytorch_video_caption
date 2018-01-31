@@ -7,7 +7,7 @@ pytorch
 
 2. download caffe and VGG model
 download caffe from [BVLC/caffe](https://github.com/BVLC/caffe) to "/root/workspace/"    
-download [VGG-16](http://www.robots.ox.ac.uk/~vgg/software/very_deep/caffe/VGG_ILSVRC_16_layers.caffemodel) model and its [prototxt}(https://gist.githubusercontent.com/ksimonyan/211839e770f7b538e2d8/raw/0067c9b32f60362c74f4c445a080beed06b07eb3/VGG_ILSVRC_16_layers_deploy.prototxt) from [caffe/model zoo](https://github.com/BVLC/caffe/wiki/Model-Zoo#models-used-by-the-vgg-team-in-ilsvrc-2014) and put it into "/root/workspace/caffe/models/vgg_16"
+download [VGG16](http://www.robots.ox.ac.uk/~vgg/software/very_deep/caffe/VGG_ILSVRC_16_layers.caffemodel) model and its [prototxt](https://gist.githubusercontent.com/ksimonyan/211839e770f7b538e2d8/raw/0067c9b32f60362c74f4c445a080beed06b07eb3/VGG_ILSVRC_16_layers_deploy.prototxt) from [caffe/model zoo](https://github.com/BVLC/caffe/wiki/Model-Zoo#models-used-by-the-vgg-team-in-ilsvrc-2014) and put it into "/root/workspace/caffe/models/vgg_16"
 
 3. extract feature from video clip
 ```
