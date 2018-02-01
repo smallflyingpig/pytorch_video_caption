@@ -1,6 +1,6 @@
 # python
 
 # data
-.npy
-.csv
-.pyc
+*.npy
+*.csv
+*.pyc
